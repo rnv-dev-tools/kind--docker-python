@@ -1,0 +1,51 @@
+services:
+  dood-kind:
+    build:
+      context: ./kind
+    image: dood-kind-manager:alpine
+    environment:
+      KIND_CLUSTER_NAME: dood-kind
+      KIND_DOCKER_NETWORK: dood-kind-net
+    volumes:
+      # DooD: Kind's Docker CLI talks to the host's Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kubeconfig-data:/shared
+    networks:
+      - lab
+    healthcheck:
+      test: ["CMD-SHELL", "kubectl --kubeconfig=/shared/config get nodes --no-headers 2>/dev/null | grep -Eq '[[:space:]]Ready[[:space:]]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    restart: unless-stopped
+
+  python-client:
+    build:
+      context: ./client
+    image: dood-kind-python-client:alpine
+    environment:
+      KUBECONFIG: /shared/config
+      KUBE_CONTEXT: kind-dood-kind
+    volumes:
+      - kubeconfig-data:/shared:ro
+      - ./client/workspace:/workspace
+      - ~/.shared_bash_history:/root/.bash_history
+    working_dir: /workspace
+    networks:
+      - lab
+    depends_on:
+      dood-kind:
+        condition: service_healthy
+    #command: ["bash", "-lc", "sleep infinity"]
+    init: true
+    #restart: unless-stopped
+
+networks:
+  lab:
+    name: dood-kind-net
+    driver: bridge
+    #external: true
+
+volumes:
+  kubeconfig-data:
